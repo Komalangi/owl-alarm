@@ -1,0 +1,11 @@
+.venv/
+.env
+*.session
+*.session-journal
+tg_session*
+tg-alice.log
+__pycache__/
+launchd.*.log
+*.log
+.DS_Store
+config.yaml

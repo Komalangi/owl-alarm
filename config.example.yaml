@@ -1,0 +1,15 @@
+# Правила: если входящее сообщение подходит под match, выполняется action.
+rules:
+  - name: "Имя контакта"
+    match:
+      # username (без @), числовой id или имя контакта; регистр не важен
+      from: ["Имя контакта"]   # впишите имя, username или id
+      private_only: false  # true — только личные сообщения, без групп
+      # text_contains: "срочно"   # необязательно: подстрока в тексте
+    action:
+      type: alice_alarm
+      minutes: 1
+      song: "Порнофильмы — Кто все эти люди"
+      volume: 1.0                      # 0.0 .. 1.0
+      text_template: "Поставь будильник через {minutes} {minutes_word} на песню {song}"
+    cooldown_seconds: 300

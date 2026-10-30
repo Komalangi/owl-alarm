@@ -1,0 +1,7 @@
+telethon
+websockets
+aiohttp
+zeroconf
+pyyaml
+python-dotenv
+certifi
