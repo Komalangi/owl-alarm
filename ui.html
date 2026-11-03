@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сова</title>
+<style>
+:root{
+  --bg:#0b0d12; --bg2:#12151d; --card:#161a24; --card2:#1c2130; --line:#262c3d;
+  --text:#e8ebf3; --dim:#8a93a8; --faint:#5b647a;
+  --accent:#ffc94d; --accent2:#ff9f43;
+  --ok:#3ddc84; --warn:#ffc94d; --bad:#ff5d6c;
+  --r:12px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);
+  font:13px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+html,body{height:100%;overflow:hidden}
+body{background:radial-gradient(120% 60% at 50% -10%,#1a2036 0%,var(--bg) 60%) no-repeat}
+.wrap{height:100vh;display:flex;flex-direction:column;padding:26px 16px 16px;max-width:420px;margin:0 auto}
+/* третий блок: аккаунты или задачи выбранного аккаунта */
+.panel{flex:1;min-height:0;display:flex;flex-direction:column;margin-bottom:0}
+.view{flex:1;min-height:0;display:flex;flex-direction:column}
+.view[hidden]{display:none}
+.scroll{flex:1;min-height:0;overflow-y:auto;margin-right:-8px;padding-right:8px}
+.acc .open{cursor:pointer}
+.chev{color:var(--faint);font-size:12px;white-space:nowrap;cursor:pointer}
+.acc .open:hover .title{color:var(--accent)}
+.thead{padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line)}
+.back{font-size:22px;line-height:1;padding:0 8px 2px;color:var(--text)}
+.back:hover{color:var(--accent)!important;background:var(--card2)!important}
+.pair{display:flex;gap:8px}
+.addt{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+/* подключение колонки */
+.connect{margin-top:10px}
+.connect ol{margin:8px 0 10px;padding-left:18px;color:var(--dim);font-size:12px}
+.connect li{margin:3px 0}
+.connect a{color:var(--accent)}
+.connect code{background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:0 4px;font-size:11.5px}
+.tag{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:6px;padding:0 5px;font-weight:500}
+/* часы */
+.clock{text-align:center;padding:6px 0 14px;user-select:none}
+.time{font-size:60px;font-weight:200;letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums;
+  background:linear-gradient(180deg,#fff 0%,#c9d0e4 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.time .sec{font-size:22px;font-weight:300;letter-spacing:0;margin-left:6px;color:var(--accent);
+  -webkit-text-fill-color:var(--accent);vertical-align:baseline}
+.date{margin-top:6px;color:var(--dim);font-size:14px}
+.date::first-letter{text-transform:uppercase}
+/* карточки */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1;min-width:0}
+h2{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 10px;font-weight:600;
+  display:flex;align-items:center;justify-content:space-between}
+.title{font-size:15px;font-weight:600}
+.sub{color:var(--dim);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sub.bad{color:var(--bad)} .sub.ok{color:var(--ok)}
+.hint{color:var(--faint);font-size:11.5px;margin-top:8px}
+/* громкость */
+.vol{margin-top:12px}
+.vol input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
+.vol .val{width:42px;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+/* переключатель */
+.sw{position:relative;width:46px;height:27px;flex:none;cursor:pointer}
+.sw input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer;z-index:2}
+.sw i{position:absolute;inset:0;background:#2b3145;border-radius:99px;transition:.2s}
+.sw i::after{content:"";position:absolute;left:3px;top:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px #0006}
+.sw input:checked+i{background:var(--ok)}
+.sw input:checked+i::after{transform:translateX(19px)}
+.sw.sm{width:36px;height:22px}.sw.sm i::after{width:16px;height:16px;left:3px;top:3px}
+.sw.sm input:checked+i::after{transform:translateX(14px)}
+/* точки */
+.dot{width:9px;height:9px;border-radius:50%;flex:none;background:var(--faint)}
+.dot.online{background:var(--ok);box-shadow:0 0 8px #3ddc8466}
+.dot.connecting{background:var(--warn);animation:pulse 1.2s infinite}
+.dot.need_login,.dot.error{background:var(--bad)}
+@keyframes pulse{50%{opacity:.35}}
+/* кнопки и поля */
+button{font:inherit;color:var(--text);background:var(--card2);border:1px solid var(--line);border-radius:9px;
+  padding:6px 11px;cursor:pointer;transition:.15s}
+button:hover{border-color:#3a4260;background:#222840}
+button:active{transform:scale(.97)}
+button.pri{background:var(--accent);color:#1a1405;border-color:var(--accent);font-weight:600}
+button.pri:hover{background:#ffd56e}
+button.ghost{background:none;border-color:transparent;color:var(--dim);padding:4px 7px}
+button.ghost:hover{color:var(--bad);background:#ff5d6c14}
+button.wide{width:100%;padding:9px}
+button:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=password],input[type=tel],select{
+  font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:9px;
+  padding:7px 10px;width:100%;outline:none;min-width:0}
+input:focus,select:focus{border-color:var(--accent)}
+select{appearance:none;-webkit-appearance:none;padding-right:24px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);
+  background-position:calc(100% - 13px) 55%,calc(100% - 8px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.inline{background:transparent;border-color:var(--accent);padding:2px 6px;font-size:15px;font-weight:600}
+.label{cursor:text;border-bottom:1px dashed transparent}
+.label:hover{border-bottom-color:var(--faint)}
+/* аккаунты */
+.acc{padding:9px 0;border-top:1px solid var(--line)}
+.acc:first-child{border-top:0;padding-top:0}
+.acc .err{color:var(--bad);font-size:11.5px;margin-top:4px;padding-left:19px}
+.form{display:flex;gap:8px;margin-top:8px;padding-left:19px}
+.form.col{flex-direction:column;padding-left:0}
+.empty{color:var(--faint);text-align:center;padding:6px 0 2px}
+details.add{margin-top:8px}
+details.add>summary{list-style:none;cursor:pointer;color:var(--accent);font-weight:600;padding:6px 0;user-select:none}
+details.add>summary::-webkit-details-marker{display:none}
+details.add[open]>summary{margin-bottom:6px}
+.stack{display:flex;flex-direction:column;gap:8px}
+/* задачи */
+.task{display:grid;grid-template-columns:1fr auto auto;gap:6px 8px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.task:first-child{border-top:0;padding-top:0}
+.task .who{display:flex;align-items:center;gap:6px;min-width:0;font-weight:600}
+.task .who span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task .arrow{color:var(--faint)}
+.task .nm{color:var(--accent)}
+.task select{grid-column:1 / 2;padding:4px 22px 4px 8px;font-size:12px}
+.task.off .who{opacity:.45}
+/* история */
+.h{display:grid;grid-template-columns:38px 1fr 16px;gap:8px;padding:7px 0;border-top:1px solid var(--line);align-items:start}
+.h:first-child{border-top:0;padding-top:0}
+.h .t{color:var(--faint);font-variant-numeric:tabular-nums;font-size:12px;padding-top:1px}
+.h .m{min-width:0}
+.h .meta{color:var(--dim);font-size:11.5px}
+.h .txt{overflow-wrap:anywhere}
+.h .st{font-weight:700;text-align:center}
+.h .st.ok{color:var(--ok)}.h .st.bad{color:var(--bad);cursor:help}
+/* тост */
+#toasts{position:fixed;left:12px;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px;z-index:50;pointer-events:none}
+.toast{background:#2a1218;border:1px solid var(--bad);color:#ffd3d8;border-radius:10px;padding:9px 12px;
+  box-shadow:0 8px 24px #000a;animation:in .2s}
+.toast.info{background:#12261b;border-color:var(--ok);color:#c8f5da}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#262c3d;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="clock">
+    <div class="time"><span id="hm">00:00</span><span class="sec" id="ss">00</span></div>
+    <div class="date" id="date">&nbsp;</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="grow">
+        <div class="title">Слушаю</div>
+        <div class="sub" id="station">Колонка: нет данных</div>
+      </div>
+      <label class="sw"><input type="checkbox" id="enabled"><i></i></label>
+    </div>
+    <div class="connect" id="connectBox" hidden>
+      <button class="pri wide" id="connectBtn">Подключить колонку</button>
+      <form class="stack" id="connectForm" autocomplete="off" hidden>
+        <ol>
+          <li>Мак и Яндекс Станция должны быть в одной Wi-Fi сети.</li>
+          <li><a href="https://oauth.yandex.ru/authorize?response_type=token&amp;client_id=23cabbbdc6cd418abb4b39c32c41195d" target="_blank">Открой страницу Яндекса</a> и войди в аккаунт, к которому привязана станция.</li>
+          <li>После входа скопируй адрес из строки браузера целиком (или кусок после <code>access_token=</code> до <code>&amp;</code>).</li>
+          <li>Вставь его ниже и нажми «Подключить».</li>
+        </ol>
+        <input type="password" id="yaToken" placeholder="Токен или адрес со страницы Яндекса" required>
+        <input type="text" id="yaIp" placeholder="IP станции, если не находится сама (необязательно)">
+        <button class="pri wide" type="submit">Подключить</button>
+      </form>
+    </div>
+    <div class="row vol">
+      <span title="Громкость Алисы, когда она читает сообщение">🔊</span>
+      <input type="range" id="volume" min="0" max="100" step="5">
+      <span class="val" id="volVal">—</span>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="wide" id="testBtn">Проверить колонку</button>
+    </div>
+  </div>
+
+  <div class="card panel">
+    <div class="view" id="viewAcc">
+      <h2>Аккаунты <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint)">нажми, чтобы открыть задачи</span></h2>
+      <div class="scroll">
+        <div id="accounts"></div>
+        <details class="add" id="addAccBox">
+          <summary>+ аккаунт</summary>
+          <form class="stack" id="addAcc" autocomplete="off">
+            <input type="text" id="accLabel" placeholder="Как Алиса называет аккаунт (Кристофер)" required>
+            <input type="tel" id="accPhone" placeholder="Телефон: +7 900 000 00 00" required>
+            <button class="pri wide" type="submit">Добавить и получить код</button>
+          </form>
+        </details>
+      </div>
+    </div>
+    <div class="view" id="viewTasks" hidden>
+      <div class="row thead">
+        <button class="ghost back" id="backBtn" title="Назад к аккаунтам">‹</button>
+        <div class="grow">
+          <div class="title label" id="tAccName" title="Нажми, чтобы переименовать">&nbsp;</div>
+          <div class="sub" id="tAccSub">&nbsp;</div>
+        </div>
+      </div>
+      <div class="scroll"><div id="tasks"></div></div>
+      <form class="stack addt" id="addTask" autocomplete="off">
+        <div class="pair">
+          <input type="text" id="tSender" placeholder="Логин: @username" required>
+          <input type="text" id="tName" placeholder="Имя: Ева">
+        </div>
+        <button class="pri wide" type="submit">Отслеживать</button>
+        <div class="hint" id="tHint" style="margin-top:0">&nbsp;</div>
+      </form>
+    </div>
+  </div>
+</div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+/* ── часы ── */
+function tick() {
+  const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  $("#hm").textContent = p(d.getHours()) + ":" + p(d.getMinutes());
+  $("#ss").textContent = p(d.getSeconds());
+  $("#date").textContent = d.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+}
+tick(); setInterval(tick, 1000);
+
+/* ── тосты и API ── */
+function toast(msg, info) {
+  const t = el("div", "toast" + (info ? " info" : ""), msg);
+  $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), 4500);
+}
+async function api(method, path, body) {
+  try {
+    const r = await fetch(path, {
+      method, headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let j = null;
+    try { j = await r.json(); } catch (e) { /* не JSON */ }
+    if (!r.ok || !j || j.ok === false) {
+      toast((j && j.error) || ("Ошибка запроса (" + r.status + ")"));
+      return null;
+    }
+    return j;
+  } catch (e) {
+    toast("Нет связи с сервисом");
+    return null;
+  }
+}
+
+/* ── состояние ── */
+let S = { enabled: false, station: {}, accounts: [], tasks: [], history: [] };
+let cur = null;          // id аккаунта, чьи задачи сейчас открыты
+const loginOpen = {};   // id аккаунта -> открыта ли форма входа
+const sigs = {};
+
+function busyIn(box) {
+  const a = document.activeElement;
+  return a && box.contains(a) && (a.tagName === "INPUT" || a.tagName === "SELECT");
+}
+function sameSig(key, data) {
+  const s = JSON.stringify(data);
+  if (sigs[key] === s) return true;
+  sigs[key] = s; return false;
+}
+
+async function refresh() {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    const j = await r.json();
+    if (j && j.ok !== false) { S = j; render(); }
+  } catch (e) { /* сервис ещё стартует */ }
+}
+
+function render() {
+  const en = $("#enabled");
+  if (document.activeElement !== en) en.checked = !!S.enabled;
+  const vol = $("#volume");
+  if (document.activeElement !== vol && S.volume != null) {
+    vol.value = Math.round(S.volume * 100); $("#volVal").textContent = vol.value + "%";
+  }
+
+  const st = S.station || {};
+  const se = $("#station");
+  if (st.ok) { se.textContent = "Колонка: " + (st.name || "найдена") + " · ok"; se.className = "sub ok"; }
+  else if (st.error) { se.textContent = "Колонка: " + (st.name ? st.name + " · " : "") + st.error; se.className = "sub bad"; }
+  else { se.textContent = "Колонка: " + (st.name || "проверяю…"); se.className = "sub"; }
+  // 429 и временные сбои связи — не повод заново подключать колонку
+  const broken = !st.ok && st.error && !/429|limited|Нет связи/i.test(st.error);
+  $("#connectBox").hidden = !(st.configured === false || broken);
+  if (st.configured === false) { se.textContent = "Колонка не подключена"; se.className = "sub bad"; }
+
+  renderAccounts();
+  if (cur) renderTasks();
+}
+
+const STATUS = { online: "в сети", connecting: "подключается…", need_login: "нужен вход", error: "ошибка" };
+
+function renderAccounts() {
+  const box = $("#accounts");
+  if (busyIn(box) || sameSig("acc", [S.accounts, loginOpen, S.tasks.map((t) => t.account)])) return;
+  box.textContent = "";
+  if (!S.accounts.length) box.appendChild(el("div", "empty", "Аккаунтов пока нет"));
+  for (const a of S.accounts) {
+    const wrap = el("div", "acc");
+    const row = el("div", "row");
+    row.appendChild(el("span", "dot " + a.status));
+    const mid = el("div", "grow");
+    mid.className = "grow open";
+    mid.onclick = () => openAcc(a.id);
+    mid.appendChild(el("div", "title", a.label || "Без названия"));
+    const parts = [];
+    if (a.username) parts.push("@" + String(a.username).replace(/^@/, ""));
+    else if (a.phone) parts.push(a.phone);
+    parts.push(STATUS[a.status] || a.status);
+    mid.appendChild(el("div", "sub", parts.join(" · ")));
+    row.appendChild(mid);
+    const n = S.tasks.filter((t) => t.account === a.id || t.account === "*").length;
+    const chev = el("span", "chev", n + " ›"); chev.title = "Задачи"; chev.onclick = () => openAcc(a.id);
+    row.appendChild(chev);
+    if (a.status === "need_login" || a.login_step) {
+      const shown = loginOpen[a.id] === true || (!!a.login_step && loginOpen[a.id] !== false);
+      const b = el("button", null, shown ? "Скрыть" : "Войти");
+      b.onclick = () => { loginOpen[a.id] = !shown; sigs.acc = null; renderAccounts(); };
+      row.appendChild(b);
+    }
+    const del = el("button", "ghost", "✕"); del.title = "Удалить аккаунт";
+    del.onclick = async () => {
+      if (!confirm("Удалить аккаунт «" + a.label + "»? Сессия Telegram будет забыта.")) return;
+      if (await api("DELETE", "/api/accounts/" + encodeURIComponent(a.id))) refresh();
+    };
+    row.appendChild(del);
+    wrap.appendChild(row);
+    if (a.error && a.status !== "online") wrap.appendChild(el("div", "err", a.error));
+    if ((a.status === "need_login" || a.login_step) && (loginOpen[a.id] === true || (!!a.login_step && loginOpen[a.id] !== false))) wrap.appendChild(loginForm(a));
+    box.appendChild(wrap);
+  }
+}
+
+function loginForm(a) {
+  const step = a.login_step || "phone";
+  const f = el("form", "form");
+  const inp = el("input");
+  inp.autocomplete = "off";
+  if (step === "phone") { inp.type = "tel"; inp.placeholder = "Телефон: +7…"; inp.value = a.phone || ""; }
+  else if (step === "code") { inp.type = "text"; inp.placeholder = "Код из Telegram"; inp.inputMode = "numeric"; }
+  else { inp.type = "password"; inp.placeholder = "Пароль 2FA"; inp.autocomplete = "current-password"; }
+  inp.required = true;
+  const b = el("button", "pri", step === "phone" ? "Отправить код" : step === "code" ? "Войти" : "Подтвердить");
+  b.type = "submit";
+  f.append(inp, b);
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const key = step === "phone" ? "phone" : step === "code" ? "code" : "password";
+    b.disabled = true;
+    const r = await api("POST", "/api/accounts/" + encodeURIComponent(a.id) + "/login", { [key]: inp.value.trim() });
+    b.disabled = false;
+    inp.blur(); sigs.acc = null;
+    if (r) refresh();
+  };
+  setTimeout(() => { if (!busyIn($("#accounts"))) inp.focus(); }, 0);
+  return f;
+}
+
+function startRename(a) {
+  const node = $("#tAccName");
+  const inp = el("input", "inline"); inp.type = "text"; inp.value = a.label;
+  inp.style.width = "180px";
+  node.textContent = ""; node.appendChild(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    const v = inp.value.trim();
+    if (save && v && v !== a.label) await api("PATCH", "/api/accounts/" + encodeURIComponent(a.id), { label: v });
+    node.textContent = v || a.label; sigs.acc = null; sigs.tasks = null; refresh();
+  };
+  inp.onkeydown = (e) => { if (e.key === "Enter") finish(true); else if (e.key === "Escape") finish(false); };
+  inp.onblur = () => finish(true);
+}
+
+function openAcc(id) {
+  cur = id; sigs.tasks = null;
+  $("#viewAcc").hidden = true; $("#viewTasks").hidden = false;
+  renderTasks();
+}
+function closeAcc() {
+  cur = null; sigs.acc = null;
+  $("#viewTasks").hidden = true; $("#viewAcc").hidden = false;
+  renderAccounts();
+}
+
+function renderTasks() {
+  const a = S.accounts.find((x) => x.id === cur);
+  if (!a) { closeAcc(); return; }
+  const box = $("#tasks");
+  if (busyIn($("#viewTasks")) || sameSig("tasks", [cur, S.tasks, a])) return;
+  $("#tAccName").textContent = a.label;
+  $("#tAccName").onclick = () => { if (!$("#tAccName").querySelector("input")) startRename(a); };
+  $("#tAccSub").textContent = (a.username ? "@" + a.username + " · " : "") + (STATUS[a.status] || a.status);
+  $("#tHint").textContent = "Алиса скажет: «" + a.label + ", тебе пишет Ева: текст»";
+  box.textContent = "";
+  const list = S.tasks.filter((t) => t.account === cur || t.account === "*");
+  if (!list.length) box.appendChild(el("div", "empty", "Никого не отслеживаем. Добавь логин ниже"));
+  for (const t of list) {
+    const row = el("div", "task" + (t.enabled ? "" : " off"));
+    const who = el("div", "who");
+    who.appendChild(el("span", null, "@" + t.sender));
+    who.appendChild(el("span", "arrow", "→"));
+    const nm = el("span", "nm", t.name); nm.title = "Нажми, чтобы изменить"; nm.style.cursor = "text";
+    nm.onclick = () => {
+      const inp = el("input", "inline"); inp.type = "text"; inp.value = t.name; inp.style.width = "110px";
+      nm.replaceWith(inp); inp.focus(); inp.select();
+      let done = false;
+      const fin = async (save) => {
+        if (done) return; done = true;
+        const v = inp.value.trim();
+        if (save && v && v !== t.name) await api("PATCH", "/api/tasks/" + encodeURIComponent(t.id), { name: v });
+        sigs.tasks = null; refresh();
+      };
+      inp.onkeydown = (e) => { if (e.key === "Enter") fin(true); else if (e.key === "Escape") fin(false); };
+      inp.onblur = () => fin(true);
+    };
+    who.appendChild(nm);
+    if (t.account === "*") { const g = el("span", "tag", "все акк."); g.title = "Задача для всех аккаунтов"; who.appendChild(g); }
+    row.appendChild(who);
+    const sw = el("label", "sw sm"); const cb = el("input"); cb.type = "checkbox"; cb.checked = !!t.enabled;
+    cb.onchange = async () => { await api("PATCH", "/api/tasks/" + encodeURIComponent(t.id), { enabled: cb.checked }); sigs.tasks = null; refresh(); };
+    sw.append(cb, el("i")); sw.title = "Включена";
+    row.appendChild(sw);
+    const del = el("button", "ghost", "✕"); del.title = "Удалить задачу";
+    del.onclick = async () => { if (await api("DELETE", "/api/tasks/" + encodeURIComponent(t.id))) refresh(); };
+    row.appendChild(del);
+    box.appendChild(row);
+  }
+}
+
+/* ── действия ── */
+$("#enabled").onchange = async (e) => {
+  const v = e.target.checked;
+  const r = await api("POST", "/api/enabled", { enabled: v });
+  if (!r) e.target.checked = !v;
+  refresh();
+};
+$("#volume").oninput = (e) => { $("#volVal").textContent = e.target.value + "%"; };
+$("#volume").onchange = async (e) => {
+  const r = await api("POST", "/api/volume", { volume: e.target.value / 100 });
+  if (r) toast("Громкость " + e.target.value + "%: так Алиса будет читать сообщения", true);
+  e.target.blur(); refresh();
+};
+$("#testBtn").onclick = async (e) => {
+  const b = e.currentTarget; b.disabled = true;
+  const r = await api("POST", "/api/test", {});
+  b.disabled = false;
+  if (r) toast("Тестовая фраза отправлена на колонку", true);
+};
+$("#addAcc").onsubmit = async (e) => {
+  e.preventDefault();
+  const label = $("#accLabel").value.trim(), phone = $("#accPhone").value.trim();
+  if (!label || !phone) return;
+  const r = await api("POST", "/api/accounts", { label, phone });
+  if (r) { $("#accLabel").value = ""; $("#accPhone").value = ""; $("#addAccBox").open = false; sigs.acc = null; refresh(); }
+};
+$("#addTask").onsubmit = async (e) => {
+  e.preventDefault();
+  const sender = $("#tSender").value.trim();
+  const name = $("#tName").value.trim() || sender.replace(/^@/, "");
+  if (!sender) return;
+  const r = await api("POST", "/api/tasks", { account: cur || "*", sender, name });
+  if (r) { $("#tSender").value = ""; $("#tName").value = ""; document.activeElement.blur(); sigs.tasks = null; refresh(); }
+};
+$("#backBtn").onclick = closeAcc;
+$("#connectBtn").onclick = () => { const f = $("#connectForm"); f.hidden = !f.hidden; if (!f.hidden) $("#yaToken").focus(); };
+$("#connectForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const b = e.submitter; if (b) b.disabled = true;
+  const r = await api("POST", "/api/station", { token: $("#yaToken").value, ip: $("#yaIp").value });
+  if (b) b.disabled = false;
+  if (r) {
+    toast("Колонка подключена: " + (r.name || "ok"), true);
+    $("#yaToken").value = ""; $("#yaIp").value = ""; $("#connectForm").hidden = true; refresh();
+  }
+};
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && cur && !busyIn($("#viewTasks"))) closeAcc(); });
+
+refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>

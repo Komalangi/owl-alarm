@@ -9,3 +9,7 @@ launchd.*.log
 *.log
 .DS_Store
 config.yaml
+watch.json
+watch.tmp
+sessions/
+*.app/

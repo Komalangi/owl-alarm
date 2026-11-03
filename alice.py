@@ -31,7 +31,7 @@ class AliceError(Exception):
 def _token() -> str:
     t = os.getenv("YANDEX_TOKEN", "").strip()
     if not t:
-        raise AliceError("Не задан YANDEX_TOKEN (см. .env.example и README)")
+        raise AliceError("Колонка не подключена: нет токена Яндекса (YANDEX_TOKEN)")
     return t
 
 
@@ -148,7 +148,7 @@ async def _send(ws, token: str, payload: dict, listen: float = 2.0) -> None:
             reply = await asyncio.wait_for(ws.recv(), left)
         except asyncio.TimeoutError:
             break
-        log.info("<- %s", str(reply)[:500])
+        log.debug("<- %s", str(reply)[:500])
 
 
 async def set_alarm(minutes: int, song: str, volume: float = 1.0,
@@ -167,3 +167,49 @@ async def set_alarm(minutes: int, song: str, volume: float = 1.0,
     except (OSError, asyncio.TimeoutError, websockets.WebSocketException) as e:
         raise AliceError(f"Не удалось подключиться к станции {ip}:{STATION_PORT}: {e!r}")
     log.info("Команда отправлена: %s", text)
+
+
+# ───────── озвучка: «Повтори за мной …» ─────────
+
+_station: tuple[str, str, float] | None = None   # (ip, conversationToken, когда получен)
+STATION_TTL = 30 * 60
+
+
+def reset_station() -> None:
+    """Забыть найденную станцию (после смены токена или IP)."""
+    global _station
+    _station = None
+
+
+async def _station_cached(force: bool = False) -> tuple[str, str]:
+    global _station
+    if force or not _station or time.monotonic() - _station[2] > STATION_TTL:
+        ip, token = await _resolve_station()
+        _station = (ip, token, time.monotonic())
+    return _station[0], _station[1]
+
+
+async def station_name() -> str | None:
+    dev = await _pick_device(await list_devices())
+    return dev.get("name")
+
+
+async def say(text: str, volume: float | None = None) -> None:
+    """Алиса произносит text дословно. При сбое один раз переподключается с новым токеном."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # у станции самоподписанный сертификат
+    last: Exception | None = None
+    for force in (False, True):
+        ip, token = await _station_cached(force)
+        try:
+            async with websockets.connect(f"wss://{ip}:{STATION_PORT}", ssl=ctx, open_timeout=10) as ws:
+                if volume is not None:
+                    await _send(ws, token, {"command": "setVolume", "volume": volume}, listen=0.5)
+                await _send(ws, token, {"command": "sendText", "text": f"Повтори за мной {text}"}, listen=1.5)
+            log.info("Сказала: %s", text)
+            return
+        except (OSError, asyncio.TimeoutError, websockets.WebSocketException) as e:
+            last = e
+            log.warning("Станция %s не ответила (%r), пробую заново", ip, e)
+    raise AliceError(f"Не удалось подключиться к станции: {last!r}")
