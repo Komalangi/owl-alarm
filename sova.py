@@ -143,9 +143,20 @@ class Speaker:
         self.history: deque = deque(maxlen=30)
         self.station = {"name": None, "ok": False, "error": None, "configured": bool(os.getenv("YANDEX_TOKEN"))}
         self.checker: asyncio.Task | None = None
+        self.last: tuple = (None, 0.0)
 
     def put(self, account: str, sender: str, text: str, spoken: str) -> None:
+        # пачка одинаковых («фото», «фото», …) подряд читается один раз
+        if self.last[0] == spoken and time.monotonic() - self.last[1] < 30:
+            return
+        self.last = (spoken, time.monotonic())
         self.queue.put_nowait((account, sender, text, spoken))
+
+    def clear(self) -> None:
+        """Выкинуть всё, что ещё не прочитано (выключили «Слушаю»)."""
+        while not self.queue.empty():
+            self.queue.get_nowait()
+        self.last = (None, 0.0)
 
     def recheck(self) -> None:
         if self.checker:
@@ -157,6 +168,8 @@ class Speaker:
         self.recheck()
         while True:
             account, sender, text, spoken = await self.queue.get()
+            if not self.store.enabled:
+                continue
             item = {"time": time.strftime("%H:%M"), "account": account, "sender": sender,
                     "text": text, "ok": True, "error": None}
             try:
@@ -194,6 +207,7 @@ class Account:
         self.error: str | None = None
         self.phone_hash: str | None = None
         self.task: asyncio.Task | None = None
+        self.albums: deque = deque(maxlen=50)
         self.client = TelegramClient(str(SESSIONS / cfg["id"]), int(os.environ["TG_API_ID"]),
                                      os.environ["TG_API_HASH"])
         self.client.add_event_handler(self.on_message, events.NewMessage(incoming=True))
@@ -271,6 +285,11 @@ class Account:
         store = self.app.store
         if not store.enabled:
             return
+        gid = event.message.grouped_id
+        if gid:  # альбом приходит пачкой сообщений, читаем первое
+            if gid in self.albums:
+                return
+            self.albums.append(gid)
         sender = await event.get_sender()
         if sender is None or getattr(sender, "bot", False):
             return
@@ -330,6 +349,8 @@ class Sova:
     async def h_enabled(self, req):
         self.store.enabled = bool((await req.json())["enabled"])
         self.store.save()
+        if not self.store.enabled:
+            self.speaker.clear()
         return ok()
 
     async def h_volume(self, req):
