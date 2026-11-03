@@ -5,6 +5,7 @@ import Cocoa
 import WebKit
 import ServiceManagement
 import CryptoKit
+import IOKit.pwr_mgt
 
 /// SOVA_SUPPORT_DIR — только для тестов.
 let SUPPORT: String = {
@@ -341,6 +342,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     var statusItem: NSStatusItem!
     var listenItem: NSMenuItem!
     var loginItem: NSMenuItem!
+    var awakeItem: NSMenuItem!
+    var sleepAssertion: IOPMAssertionID = 0
     var enabled = false
     var poll: Timer?
 
@@ -354,6 +357,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             return
         }
         NSApp.setActivationPolicy(.accessory)
+        UserDefaults.standard.register(defaults: ["keepAwake": true])
+        setKeepAwake(UserDefaults.standard.bool(forKey: "keepAwake"))
         buildMainMenu()
         buildWindow()
         buildStatusItem()
@@ -460,6 +465,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         loginItem = NSMenuItem(title: "Запускать при входе", action: #selector(toggleLogin), keyEquivalent: "")
         loginItem.target = self
         menu.addItem(loginItem)
+        awakeItem = NSMenuItem(title: "Не давать маку засыпать", action: #selector(toggleAwake), keyEquivalent: "")
+        awakeItem.target = self
+        menu.addItem(awakeItem)
         menu.addItem(.separator())
         let q = NSMenuItem(title: "Выйти", action: #selector(quit), keyEquivalent: "")
         q.target = self
@@ -470,6 +478,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func menuNeedsUpdate(_ menu: NSMenu) {
         listenItem.state = enabled ? .on : .off
         loginItem.state = autostartEnabled() ? .on : .off
+        awakeItem.state = sleepAssertion != 0 ? .on : .off
         refreshState()
     }
 
@@ -495,8 +504,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     // ── автозапуск ──
     func autostartEnabled() -> Bool {
-        if #available(macOS 13.0, *), SMAppService.mainApp.status == .enabled { return true }
         return FileManager.default.fileExists(atPath: AGENT_PLIST)
+    }
+
+    /// Пока Сова работает, мак не уходит в сон по бездействию (экран при этом может гаснуть).
+    func setKeepAwake(_ on: Bool) {
+        if on && sleepAssertion == 0 {
+            let rc = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
+                                                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                                                 "Sova: listening to Telegram" as CFString, &sleepAssertion)
+            if rc != kIOReturnSuccess { sleepAssertion = 0; appendLog("не удалось запретить сон: \(rc)") }
+        } else if !on && sleepAssertion != 0 {
+            IOPMAssertionRelease(sleepAssertion)
+            sleepAssertion = 0
+        }
+    }
+
+    @objc func toggleAwake() {
+        let on = sleepAssertion == 0
+        setKeepAwake(on)
+        UserDefaults.standard.set(on, forKey: "keepAwake")
     }
 
     @objc func toggleLogin() {
@@ -504,14 +531,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func setAutostart(_ on: Bool) {
-        if #available(macOS 13.0, *) {
-            do {
-                if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-                if !on { try? FileManager.default.removeItem(atPath: AGENT_PLIST) }
-                if SMAppService.mainApp.status == .enabled || !on { return }
-            } catch {
-                appendLog("SMAppService: \(error) — пробую LaunchAgent")
-            }
+        // только LaunchAgent: у приложения без подписи Apple регистрация SMAppService слетает при обновлении
+        if #available(macOS 13.0, *), SMAppService.mainApp.status == .enabled {
+            try? SMAppService.mainApp.unregister()
         }
         if on {
             let app = Bundle.main.bundlePath
