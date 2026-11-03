@@ -16,7 +16,7 @@
    На новых macOS: Системные настройки → Конфиденциальность и безопасность → «Всё равно открыть».
 3. При первом запуске Сова 1–2 минуты ставит компоненты. Нужны интернет и Python 3.9+
    (есть на любом маке с Command Line Tools; если их нет, macOS сама предложит поставить).
-4. В окне: «Подключить Telegram» (api_id и api_hash с my.telegram.org, инструкция прямо в окне),
+4. В окне (подробная справка — кнопка «?» вверху): «Подключить Telegram» (api_id и api_hash с my.telegram.org, инструкция прямо в окне),
    «Подключить колонку», затем «+ аккаунт» и задачи.
 
 Нужны: macOS 12+, Яндекс Станция в той же Wi-Fi сети, что и мак.
@@ -42,7 +42,7 @@
 ## Сборка
 
 ```bash
-bash make_dmg.sh                       # build/Сова.app и build/Sova-1.0.0.dmg (VERSION=1.1.0 bash make_dmg.sh)
+bash make_dmg.sh                       # build/Сова.app и build/Sova-1.0.0.dmg (версия: VERSION=1.0.2 bash make_dmg.sh)
 bash build_app.sh --install            # собрать и поставить в /Applications
 .venv/bin/python main.py serve         # только сервис из папки проекта, интерфейс на http://127.0.0.1:7781
 .venv/bin/python main.py say "привет"  # проверить колонку

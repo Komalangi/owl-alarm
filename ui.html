@@ -41,7 +41,28 @@ body{background:radial-gradient(120% 60% at 50% -10%,#1a2036 0%,var(--bg) 60%) n
 .connect code{background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:0 4px;font-size:11.5px}
 .tag{font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:6px;padding:0 5px;font-weight:500}
 /* часы */
-.clock{text-align:center;padding:6px 0 14px;user-select:none}
+.clock{text-align:center;padding:6px 0 14px;user-select:none;position:relative}
+/* справка */
+.helpBtn{position:absolute;right:0;top:-10px;width:28px;height:28px;border-radius:50%;padding:0;
+  font-weight:700;color:var(--dim);background:var(--card);font-size:14px}
+.helpBtn:hover{color:var(--accent)}
+.more{color:var(--accent);cursor:pointer;font-size:12px;text-decoration:underline;background:none;border:0;padding:0}
+.more:hover{background:none;border:0}
+#help{position:fixed;inset:0;background:var(--bg);z-index:40;display:flex;flex-direction:column}
+#help .hhead{display:flex;align-items:center;gap:10px;padding:26px 16px 10px;border-bottom:1px solid var(--line)}
+#help .hhead .title{flex:1;font-size:17px}
+#help .hbody{flex:1;overflow-y:auto;padding:4px 16px 20px}
+#help details{border-bottom:1px solid var(--line)}
+#help summary{list-style:none;cursor:pointer;padding:12px 0;font-weight:600;font-size:14px;display:flex;justify-content:space-between}
+#help summary::-webkit-details-marker{display:none}
+#help summary::after{content:"›";color:var(--faint);transition:.15s}
+#help details[open] summary::after{transform:rotate(90deg)}
+#help ol,#help ul{margin:0 0 12px;padding-left:20px;color:var(--dim)}
+#help li{margin:5px 0}
+#help p{color:var(--dim);margin:0 0 10px}
+#help b{color:var(--text)}
+#help a{color:var(--accent)}
+#help code{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:0 4px;font-size:11.5px;color:var(--text)}
 .time{font-size:60px;font-weight:200;letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums;
   background:linear-gradient(180deg,#fff 0%,#c9d0e4 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .time .sec{font-size:22px;font-weight:300;letter-spacing:0;margin-left:6px;color:var(--accent);
@@ -140,6 +161,7 @@ details.add[open]>summary{margin-bottom:6px}
 <body>
 <div class="wrap">
   <div class="clock">
+    <button class="helpBtn" id="helpBtn" title="Как пользоваться">?</button>
     <div class="time"><span id="hm">00:00</span><span class="sec" id="ss">00</span></div>
     <div class="date" id="date">&nbsp;</div>
   </div>
@@ -164,6 +186,7 @@ details.add[open]>summary{margin-bottom:6px}
         <input type="password" id="yaToken" placeholder="Токен или адрес со страницы Яндекса" required>
         <input type="text" id="yaIp" placeholder="IP станции, если не находится сама (необязательно)">
         <button class="pri wide" type="submit">Подключить</button>
+        <button class="more" type="button" data-help="hSt">Подробная инструкция и что делать, если не находит</button>
       </form>
     </div>
     <div class="row vol">
@@ -193,6 +216,7 @@ details.add[open]>summary{margin-bottom:6px}
               <input type="password" id="tgHash" placeholder="api_hash" required>
             </div>
             <button class="pri wide" type="submit">Подключить Telegram</button>
+            <button class="more" type="button" data-help="hTg">Подробная инструкция и что делать, если не получается</button>
           </form>
         </div>
         <div id="accounts"></div>
@@ -224,6 +248,87 @@ details.add[open]>summary{margin-bottom:6px}
         <div class="hint" id="tHint" style="margin-top:0">&nbsp;</div>
       </form>
     </div>
+  </div>
+</div>
+<div id="help" hidden>
+  <div class="hhead">
+    <div class="title">Как пользоваться Совой</div>
+    <button class="ghost back" id="helpClose" title="Закрыть">✕</button>
+  </div>
+  <div class="hbody">
+    <p style="margin-top:12px">Сова слушает твои аккаунты Telegram, и Яндекс Станция читает вслух сообщения от тех, кого ты выбрал:
+      <b>«Кристофер, тебе пишет Ева: текст»</b>. Настройка один раз, по порядку:</p>
+
+    <details id="hTg" open>
+      <summary>1. Подключить Telegram</summary>
+      <p>Telegram пускает сторонние программы только по ключам разработчика. Получить их бесплатно и один раз —
+        потом с ними можно добавить сколько угодно аккаунтов.</p>
+      <ol>
+        <li>Открой <a href="https://my.telegram.org/apps" target="_blank">my.telegram.org</a>.</li>
+        <li>Введи номер телефона в международном формате (<code>+79991234567</code>) и нажми Next.
+          Код придёт <b>в сам Telegram</b> (чат «Telegram»), не по СМС.</li>
+        <li>Открой <b>API development tools</b>. Если ключи уже создавались, сразу увидишь <code>App api_id</code> и <code>App api_hash</code> — бери их.</li>
+        <li>Иначе заполни форму: <b>App title</b> — любое, например <code>Sova</code>; <b>Short name</b> — 5–32 латинские буквы, например <code>sovaapp</code>;
+          URL и Description пустые; <b>Platform</b> — Desktop. Нажми Create application.</li>
+        <li>Скопируй <b>App api_id</b> (число) и <b>App api_hash</b> (32 символа) в Сову → «Подключить Telegram».</li>
+      </ol>
+      <p><b>Если не выходит:</b></p>
+      <ul>
+        <li>Пишет просто <code>ERROR</code> при создании — это частая беда сайта. Подожди 10–30 минут и повтори,
+          попробуй другой браузер или режим инкогнито, выключи или наоборот включи VPN.</li>
+        <li>Сайт не открывается — попробуй через VPN.</li>
+        <li>Ключи никому не показывай: по ним можно действовать от имени твоей программы.</li>
+      </ul>
+    </details>
+
+    <details id="hAcc">
+      <summary>2. Добавить аккаунт</summary>
+      <ol>
+        <li>В блоке «Аккаунты» нажми <b>+ аккаунт</b>.</li>
+        <li>Подпись — как Алиса будет называть этот аккаунт («Кристофер», «Работа»). Телефон — номер аккаунта.</li>
+        <li>Введи код, который пришёл в Telegram. Если стоит облачный пароль (двухэтапная проверка) — введи и его.</li>
+        <li>Зелёная точка — аккаунт слушается. Можно добавить несколько аккаунтов теми же ключами.</li>
+      </ol>
+      <p>Сова только читает входящие, ничего не пишет и не отмечает прочитанным. В списке устройств Telegram она появится как новый сеанс —
+        его можно завершить там в любой момент.</p>
+    </details>
+
+    <details id="hTask">
+      <summary>3. Кого слушать</summary>
+      <ol>
+        <li>Нажми на аккаунт — блок переключится на его задачи.</li>
+        <li>Логин — @username человека (видно в его профиле). Имя — как Алиса его назовёт: «Ева», «Шеф».</li>
+        <li>Тумблер у задачи временно выключает её, ✕ удаляет. «‹» — назад к аккаунтам.</li>
+      </ol>
+      <p>Ловятся сообщения и в личке, и в группах, где пишет этот человек. Ссылки Алиса заменит словом «ссылка», вместо фото скажет «фото».</p>
+    </details>
+
+    <details id="hSt">
+      <summary>4. Подключить колонку</summary>
+      <ol>
+        <li>Мак и Яндекс Станция должны быть <b>в одной Wi-Fi сети</b> (не гостевой).</li>
+        <li>Нажми «Подключить колонку» → «Открой страницу Яндекса» и войди в аккаунт, к которому привязана станция.</li>
+        <li>После входа браузер откроет пустую страницу. Скопируй <b>весь адрес</b> из адресной строки
+          (в нём есть <code>access_token=</code>) и вставь в поле, нажми «Подключить».</li>
+        <li>Если macOS спросит «Разрешить Сове искать устройства в локальной сети» — нажми <b>Разрешить</b>,
+          иначе колонка не найдётся.</li>
+        <li>Нажми «Проверить колонку» — Алиса скажет тестовую фразу.</li>
+      </ol>
+      <p><b>Если не находит станцию:</b> проверь, что VPN выключен и мак в той же сети. Можно вписать IP станции вручную
+        (его видно в настройках роутера среди устройств). Если запретил доступ к локальной сети — включи его в
+        Системные настройки → Конфиденциальность и безопасность → Локальная сеть → Сова.
+        Если станций несколько, Сова берёт первую.</p>
+    </details>
+
+    <details id="hMisc">
+      <summary>Прочее</summary>
+      <ul>
+        <li>Сова живёт в меню-баре (иконка совы вверху справа). Закрытое окно не выключает её, выйти — через меню.</li>
+        <li>«Запускать при входе» в том же меню — чтобы стартовала сама после перезагрузки.</li>
+        <li>«Слушаю» выключает озвучку целиком, ползунок 🔊 — громкость, с которой Алиса читает.</li>
+        <li>Все настройки и сессии хранятся только на этом маке: <code>~/Library/Application Support/Sova</code>.</li>
+      </ul>
+    </details>
   </div>
 </div>
 <div id="toasts"></div>
@@ -490,6 +595,17 @@ $("#addTask").onsubmit = async (e) => {
   if (r) { $("#tSender").value = ""; $("#tName").value = ""; document.activeElement.blur(); sigs.tasks = null; refresh(); }
 };
 $("#backBtn").onclick = closeAcc;
+function openHelp(section) {
+  $("#help").hidden = false;
+  if (section) {
+    document.querySelectorAll("#help details").forEach((d) => { d.open = d.id === section; });
+    setTimeout(() => $("#" + section).scrollIntoView({ block: "start" }), 0);
+  }
+}
+$("#helpBtn").onclick = () => openHelp();
+$("#helpClose").onclick = () => { $("#help").hidden = true; };
+document.querySelectorAll("[data-help]").forEach((b) => { b.onclick = () => openHelp(b.dataset.help); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#help").hidden) $("#help").hidden = true; });
 $("#tgForm").onsubmit = async (e) => {
   e.preventDefault();
   const b = e.submitter; if (b) b.disabled = true;
