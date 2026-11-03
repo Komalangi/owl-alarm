@@ -180,6 +180,21 @@ details.add[open]>summary{margin-bottom:6px}
     <div class="view" id="viewAcc">
       <h2>Аккаунты <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--faint)">нажми, чтобы открыть задачи</span></h2>
       <div class="scroll">
+        <div class="connect" id="tgBox" hidden style="margin:0 0 10px">
+          <div class="sub bad" style="margin-bottom:8px">Telegram не подключён</div>
+          <form class="stack" id="tgForm" autocomplete="off">
+            <ol style="margin-top:0">
+              <li>Открой <a href="https://my.telegram.org/apps" target="_blank">my.telegram.org</a> и войди по номеру телефона (код придёт в Telegram).</li>
+              <li>Зайди в «API development tools» и создай приложение: название и короткое имя любые, платформа Desktop.</li>
+              <li>Скопируй <code>App api_id</code> и <code>App api_hash</code> сюда.</li>
+            </ol>
+            <div class="pair">
+              <input type="text" id="tgId" placeholder="api_id" inputmode="numeric" required style="flex:0 0 32%">
+              <input type="password" id="tgHash" placeholder="api_hash" required>
+            </div>
+            <button class="pri wide" type="submit">Подключить Telegram</button>
+          </form>
+        </div>
         <div id="accounts"></div>
         <details class="add" id="addAccBox">
           <summary>+ аккаунт</summary>
@@ -302,9 +317,11 @@ const STATUS = { online: "в сети", connecting: "подключается…
 
 function renderAccounts() {
   const box = $("#accounts");
+  $("#tgBox").hidden = S.telegram !== false;
+  $("#addAccBox").hidden = S.telegram === false;
   if (busyIn(box) || sameSig("acc", [S.accounts, loginOpen, S.tasks.map((t) => t.account)])) return;
   box.textContent = "";
-  if (!S.accounts.length) box.appendChild(el("div", "empty", "Аккаунтов пока нет"));
+  if (!S.accounts.length && S.telegram !== false) box.appendChild(el("div", "empty", "Аккаунтов пока нет. Добавь первый ниже"));
   for (const a of S.accounts) {
     const wrap = el("div", "acc");
     const row = el("div", "row");
@@ -473,6 +490,13 @@ $("#addTask").onsubmit = async (e) => {
   if (r) { $("#tSender").value = ""; $("#tName").value = ""; document.activeElement.blur(); sigs.tasks = null; refresh(); }
 };
 $("#backBtn").onclick = closeAcc;
+$("#tgForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const b = e.submitter; if (b) b.disabled = true;
+  const r = await api("POST", "/api/telegram", { api_id: $("#tgId").value, api_hash: $("#tgHash").value });
+  if (b) b.disabled = false;
+  if (r) { toast("Telegram подключён, теперь добавь аккаунт", true); $("#tgId").value = ""; $("#tgHash").value = ""; sigs.acc = null; refresh(); }
+};
 $("#connectBtn").onclick = () => { const f = $("#connectForm"); f.hidden = !f.hidden; if (!f.hidden) $("#yaToken").focus(); };
 $("#connectForm").onsubmit = async (e) => {
   e.preventDefault();

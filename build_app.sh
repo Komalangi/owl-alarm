@@ -1,28 +1,43 @@
 #!/bin/bash
-# Сборка «Сова.app» из SovaApp.swift (Command Line Tools, без Xcode) и установка в /Applications.
+# Сборка «Сова.app» из SovaApp.swift (Command Line Tools, без Xcode) в build/Сова.app.
+# Флаг --install: дополнительно скопировать в /Applications. VERSION=1.2.3 bash build_app.sh задаёт версию.
 set -euo pipefail
 cd "$(dirname "$0")"
 PROJECT="$(pwd)"
-APP="$PROJECT/Сова.app"
+VERSION="${VERSION:-1.0.0}"
+INSTALL=0
+[ "${1:-}" = "--install" ] && INSTALL=1
+mkdir -p "$PROJECT/build"
+APP="$PROJECT/build/Сова.app"
 DEST="/Applications/Сова.app"
 TMP="$(mktemp -d /tmp/sova-build.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "→ компилирую Swift…"
-esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
-PROJ_ESC="$(esc "$PROJECT")"
-mkdir -p "$TMP/src"
-python3 - "$PROJECT/SovaApp.swift" "$TMP/src/main.swift" "$PROJ_ESC" <<'PY'
-import sys
-src, out, proj = sys.argv[1:4]
-open(out, "w", encoding="utf-8").write(open(src, encoding="utf-8").read().replace("__PROJECT__", proj))
-PY
-xcrun swiftc -O -o "$TMP/Sova" "$TMP/src/main.swift" \
-  -framework Cocoa -framework WebKit -framework ServiceManagement
+ARCHS="arm64"
+for A in arm64 x86_64; do
+  if xcrun swiftc -O -target "$A-apple-macos12" -o "$TMP/Sova-$A" "$PROJECT/SovaApp.swift" \
+       -framework Cocoa -framework WebKit -framework ServiceManagement 2> "$TMP/err-$A.txt"; then
+    echo "  $A: ок"
+  else
+    echo "  $A: не собрался"; head -5 "$TMP/err-$A.txt"
+    [ "$A" = arm64 ] && { echo "arm64 обязателен"; exit 1; }
+    rm -f "$TMP/Sova-$A"
+  fi
+done
+if [ -f "$TMP/Sova-x86_64" ]; then
+  lipo -create "$TMP/Sova-arm64" "$TMP/Sova-x86_64" -output "$TMP/Sova"; ARCHS="arm64 x86_64"
+else
+  echo "ВНИМАНИЕ: x86_64 не собрался, бинарь только arm64"
+  cp "$TMP/Sova-arm64" "$TMP/Sova"
+fi
 
 echo "→ собираю пакет…"
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/app"
+for f in main.py sova.py alice.py ui.html requirements.txt; do
+  cp "$PROJECT/$f" "$APP/Contents/Resources/app/$f"
+done
 cp "$TMP/Sova" "$APP/Contents/MacOS/Sova"
 chmod +x "$APP/Contents/MacOS/Sova"
 
@@ -69,9 +84,9 @@ cat > "$APP/Contents/Info.plist" <<PL
 <key>CFBundleDisplayName</key><string>Сова</string>
 <key>CFBundleExecutable</key><string>Sova</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>LSMinimumSystemVersion</key><string>11.0</string>
+<key>CFBundleShortVersionString</key><string>$VERSION</string>
+<key>CFBundleVersion</key><string>$VERSION</string>
+<key>LSMinimumSystemVersion</key><string>12.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/><key>NSAllowsArbitraryLoads</key><true/></dict>
@@ -82,8 +97,10 @@ PL
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || echo "(codesign пропущен)"
 touch "$APP"
 
-rm -rf "$HOME/Applications/Сова.app"  # старое место установки
-rm -rf "$DEST"
-cp -R "$APP" "$DEST"
-echo "Готово: $APP"
-echo "Установлено: $DEST"
+echo "Готово: $APP (архитектуры: $ARCHS, версия $VERSION)"
+if [ "$INSTALL" = 1 ]; then
+  rm -rf "$HOME/Applications/Сова.app"  # старое место установки
+  rm -rf "$DEST"
+  cp -R "$APP" "$DEST"
+  echo "Установлено: $DEST"
+fi

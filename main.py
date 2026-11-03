@@ -1,5 +1,6 @@
 """CLI: serve (сервис Совы с веб-интерфейсом) / devices / say."""
 import argparse
+import os
 import asyncio
 import logging
 import sys
@@ -9,7 +10,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 HERE = Path(__file__).parent
-load_dotenv(HERE / ".env")
+DATA = Path(os.getenv("SOVA_HOME") or HERE)   # приложение задаёт ~/Library/Application Support/Sova
+DATA.mkdir(parents=True, exist_ok=True)
+load_dotenv(DATA / ".env")
 
 import alice  # noqa: E402
 import sova  # noqa: E402
@@ -20,7 +23,7 @@ def setup_logging() -> None:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[logging.StreamHandler(),
-                  RotatingFileHandler(HERE / "sova.log", maxBytes=2_000_000, backupCount=2, encoding="utf-8")],
+                  RotatingFileHandler(DATA / "sova.log", maxBytes=2_000_000, backupCount=2, encoding="utf-8")],
     )
     logging.getLogger("telethon").setLevel(logging.WARNING)
 

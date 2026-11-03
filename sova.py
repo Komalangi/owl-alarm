@@ -3,6 +3,8 @@
 Фраза всегда одна: «<Аккаунт>, тебе пишет <имя>: <текст>».
 Настройки (аккаунты, задачи, вкл/выкл) лежат в watch.json, правятся через веб-интерфейс на 127.0.0.1:7781.
 """
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -22,8 +24,9 @@ import alice
 
 log = logging.getLogger("sova")
 HERE = Path(__file__).parent
-STORE = HERE / "watch.json"
-SESSIONS = HERE / "sessions"
+DATA = Path(os.getenv("SOVA_HOME") or HERE)   # настройки, сессии и .env пользователя
+STORE = DATA / "watch.json"
+SESSIONS = DATA / "sessions"
 UI = HERE / "ui.html"
 PORT = 7781
 MAX_TEXT = 280          # дальше Алиса говорит «и так далее»
@@ -286,7 +289,7 @@ class Account:
 
 class Sova:
     def __init__(self):
-        SESSIONS.mkdir(exist_ok=True)
+        SESSIONS.mkdir(parents=True, exist_ok=True)
         self.store = Store()
         self.speaker = Speaker(self.store)
         self.accounts: dict[str, Account] = {}
@@ -297,9 +300,23 @@ class Sova:
         acc.start()
         return acc
 
+    def acc_state(self, cfg: dict) -> dict:
+        if cfg["id"] in self.accounts:
+            return self.accounts[cfg["id"]].state()
+        return {"id": cfg["id"], "label": cfg["label"], "username": cfg.get("username"), "phone": cfg.get("phone"),
+                "status": "error", "login_step": None, "error": "Сначала подключи Telegram"}
+
+    def start_accounts(self) -> None:
+        if not telegram_ready():
+            return
+        for cfg in self.store.accounts:
+            if cfg["id"] not in self.accounts:
+                self.add_runner(cfg)
+
     def state(self) -> dict:
         return {"enabled": self.store.enabled, "volume": self.store.volume, "station": self.speaker.station,
-                "accounts": [self.accounts[a["id"]].state() for a in self.store.accounts],
+                "telegram": telegram_ready(),
+                "accounts": [self.acc_state(a) for a in self.store.accounts],
                 "tasks": self.store.tasks, "history": list(self.speaker.history)[:10]}
 
     # обработчики
@@ -366,7 +383,24 @@ class Sova:
         self.store.save()
         return ok()
 
+    async def h_telegram(self, req):
+        """Ключи приложения Telegram с my.telegram.org. Пишутся в .env."""
+        b = await req.json()
+        api_id, api_hash = str(b.get("api_id") or "").strip(), str(b.get("api_hash") or "").strip()
+        if not api_id.isdigit():
+            raise ValueError("api_id — это число со страницы my.telegram.org")
+        if not re.fullmatch(r"[0-9a-f]{32}", api_hash):
+            raise ValueError("api_hash — 32 символа (цифры и буквы a–f)")
+        set_env({"TG_API_ID": api_id, "TG_API_HASH": api_hash})
+        for acc in list(self.accounts.values()):
+            await acc.stop()
+        self.accounts.clear()
+        self.start_accounts()
+        return ok()
+
     async def h_acc_add(self, req):
+        if not telegram_ready():
+            raise ValueError("Сначала подключи Telegram")
         b = await req.json()
         label = (b.get("label") or "").strip()
         if not label:
@@ -391,7 +425,8 @@ class Sova:
     async def h_acc_del(self, req):
         acc_id = req.match_info["id"]
         cfg = self.store.account(acc_id)
-        await self.accounts.pop(acc_id).stop()
+        if acc_id in self.accounts:
+            await self.accounts.pop(acc_id).stop()
         self.store.accounts.remove(cfg)
         self.store.tasks = [t for t in self.store.tasks if t["account"] != acc_id]
         self.store.save()
@@ -400,6 +435,8 @@ class Sova:
 
     async def h_acc_login(self, req):
         self.store.account(req.match_info["id"])
+        if req.match_info["id"] not in self.accounts:
+            raise ValueError("Сначала подключи Telegram")
         await self.accounts[req.match_info["id"]].login(await req.json())
         return ok()
 
@@ -409,9 +446,13 @@ class Sova:
         return ok()
 
 
+def telegram_ready() -> bool:
+    return bool(os.getenv("TG_API_ID", "").strip().isdigit() and os.getenv("TG_API_HASH", "").strip())
+
+
 def set_env(values: dict) -> None:
     """Обновить ключи в .env (остальные строки не трогаем) и в окружении процесса."""
-    path = HERE / ".env"
+    path = DATA / ".env"
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
     left = dict(values)
     for i, line in enumerate(lines):
@@ -453,6 +494,7 @@ async def serve(port: int = PORT) -> None:
     r.add_post("/api/enabled", sova.h_enabled)
     r.add_post("/api/volume", sova.h_volume)
     r.add_post("/api/station", sova.h_station)
+    r.add_post("/api/telegram", sova.h_telegram)
     r.add_post("/api/tasks", sova.h_task_add)
     r.add_patch("/api/tasks/{id}", sova.h_task_patch)
     r.add_delete("/api/tasks/{id}", sova.h_task_del)
@@ -467,6 +509,5 @@ async def serve(port: int = PORT) -> None:
     await web.TCPSite(runner, "127.0.0.1", port).start()
     log.info("Сова: http://127.0.0.1:%s", port)
 
-    for cfg in sova.store.accounts:
-        sova.add_runner(cfg)
+    sova.start_accounts()
     await sova.speaker.run()

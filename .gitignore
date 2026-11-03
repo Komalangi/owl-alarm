@@ -13,3 +13,4 @@ watch.json
 watch.tmp
 sessions/
 *.app/
+build/

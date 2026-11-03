@@ -1,7 +1,6 @@
-telethon
-websockets
-aiohttp
-zeroconf
-pyyaml
-python-dotenv
+telethon>=1.36,<2
+websockets>=13
+aiohttp>=3.9
+zeroconf>=0.130
+python-dotenv>=1.0
 certifi

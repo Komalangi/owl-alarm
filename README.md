@@ -9,6 +9,19 @@
 - Вместо медиа без подписи Алиса говорит «фото», «голосовое сообщение» и т. п.
 - Сообщения идут в очередь, Алиса не перебивает сама себя.
 
+## Установка
+
+1. Скачай `Sova-<версия>.dmg` из [Releases](https://github.com/Komalangi/owl-alarm/releases/latest), открой и перетащи Сову в «Программы».
+2. Первый запуск: правый клик по Сове → «Открыть» → «Открыть» (приложение не подписано Apple).
+   На новых macOS: Системные настройки → Конфиденциальность и безопасность → «Всё равно открыть».
+3. При первом запуске Сова 1–2 минуты ставит компоненты. Нужны интернет и Python 3.9+
+   (есть на любом маке с Command Line Tools; если их нет, macOS сама предложит поставить).
+4. В окне: «Подключить Telegram» (api_id и api_hash с my.telegram.org, инструкция прямо в окне),
+   «Подключить колонку», затем «+ аккаунт» и задачи.
+
+Нужны: macOS 12+, Яндекс Станция в той же Wi-Fi сети, что и мак.
+Данные хранятся в `~/Library/Application Support/Sova`, лог приложения в `~/Library/Logs/Sova.log`.
+
 ## Как пользоваться
 
 `/Applications/Сова.app` — небольшое окно-часы, живёт в меню-баре (иконка совы). Окно из трёх блоков:
@@ -26,16 +39,15 @@
 Настройки лежат в `watch.json`, сессии Telegram в `sessions/` (дают доступ к аккаунтам, никому не передавать;
 оба в `.gitignore`).
 
-## Сборка и запуск без приложения
+## Сборка
 
 ```bash
-bash build_app.sh                      # собрать Сова.app и положить в /Applications
-.venv/bin/python main.py serve         # только сервис, интерфейс на http://127.0.0.1:7781
+bash make_dmg.sh                       # build/Сова.app и build/Sova-1.0.0.dmg (VERSION=1.1.0 bash make_dmg.sh)
+bash build_app.sh --install            # собрать и поставить в /Applications
+.venv/bin/python main.py serve         # только сервис из папки проекта, интерфейс на http://127.0.0.1:7781
 .venv/bin/python main.py say "привет"  # проверить колонку
 .venv/bin/python main.py devices       # станции аккаунта Яндекса и их IP
 ```
 
-`.env`: `TG_API_ID`, `TG_API_HASH` (my.telegram.org), `YANDEX_TOKEN`
-(https://oauth.yandex.ru/authorize?response_type=token&client_id=23cabbbdc6cd418abb4b39c32c41195d),
-по желанию `STATION_IP` и `STATION_DEVICE_ID`. Компьютер и станция должны быть в одной Wi-Fi сети.
-Лог: `sova.log`, лог приложения `~/Library/Logs/Sova.log`.
+Без `SOVA_HOME` сервис хранит `.env`, `watch.json` и `sessions/` рядом с кодом; приложение задаёт
+`SOVA_HOME=~/Library/Application Support/Sova`. Ключи можно вписать в `.env` вручную по образцу `.env.example`.
