@@ -45,23 +45,44 @@ def _minutes_word(n: int) -> str:
     return "минут"
 
 
+_api_lock: asyncio.Lock | None = None   # не больше одного запроса к Яндексу одновременно
+
+
 async def _get(session: aiohttp.ClientSession, path: str, **params) -> dict:
+    """GET к glagol API. На 429 (Яндекс ограничивает частоту) повторяем с растущей паузой."""
+    global _api_lock
     headers = {"Authorization": f"Oauth {_token()}"}
-    try:
-        async with session.get(f"{API}/{path}", headers=headers, params=params) as r:
-            if r.status in (401, 403):
-                raise AliceError("Яндекс отклонил токен (401/403): YANDEX_TOKEN неверный или просрочен")
-            if r.status != 200:
-                raise AliceError(f"Яндекс API {path}: HTTP {r.status}: {(await r.text())[:200]}")
-            return await r.json()
-    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-        raise AliceError(f"Нет связи с quasar.yandex.net: {e!r}")
+    _api_lock = _api_lock or asyncio.Lock()   # создаём внутри цикла событий (Python 3.9)
+    async with _api_lock:
+        for delay in (1, 2, 4, 8, 15, 0):
+            try:
+                async with session.get(f"{API}/{path}", headers=headers, params=params) as r:
+                    if r.status in (401, 403):
+                        raise AliceError("Яндекс отклонил токен (401/403): YANDEX_TOKEN неверный или просрочен")
+                    if r.status == 200:
+                        return await r.json()
+                    text = (await r.text())[:200]
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                raise AliceError(f"Нет связи с quasar.yandex.net: {e!r}")
+            if r.status != 429 or not delay:
+                break
+            log.info("Яндекс %s: 429, повтор через %s с", path, delay)
+            await asyncio.sleep(delay)
+    raise AliceError(f"Яндекс API {path}: HTTP {r.status}: {text}")
 
 
-async def list_devices() -> list[dict]:
-    async with aiohttp.ClientSession(timeout=HTTP_TIMEOUT, connector=aiohttp.TCPConnector(ssl=SSL_CTX)) as s:
-        data = await _get(s, "device_list")
-    return data.get("devices", [])
+_devices: tuple[list[dict], float] | None = None
+DEVICES_TTL = 6 * 3600
+
+
+async def list_devices(fresh: bool = False) -> list[dict]:
+    """Устройства аккаунта; кэш на 6 часов, чтобы не упираться в лимит Яндекса."""
+    global _devices
+    if fresh or not _devices or time.monotonic() - _devices[1] > DEVICES_TTL:
+        async with aiohttp.ClientSession(timeout=HTTP_TIMEOUT, connector=aiohttp.TCPConnector(ssl=SSL_CTX)) as s:
+            data = await _get(s, "device_list")
+        _devices = (data.get("devices", []), time.monotonic())
+    return _devices[0]
 
 
 async def discover_stations(timeout: float = 4.0) -> dict[str, str]:
@@ -179,8 +200,9 @@ STATION_TTL = 30 * 60
 
 def reset_station() -> None:
     """Забыть найденную станцию (после смены токена или IP)."""
-    global _station
+    global _station, _devices
     _station = None
+    _devices = None
 
 
 async def _station_cached(force: bool = False) -> tuple[str, str]:

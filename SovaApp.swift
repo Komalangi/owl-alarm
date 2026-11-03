@@ -63,13 +63,31 @@ func api(_ method: String, _ path: String, _ body: [String: Any]? = nil, _ done:
 
 // ───────── бэкенд как дочерний процесс ─────────
 
+/// Сервис запускается через launchd, а не дочерним процессом: тогда доступ к локальной сети
+/// (нужен, чтобы достучаться до колонки) спрашивается у Python и не сбрасывается при обновлении Совы.
+let BACKEND_LABEL = "com.user.sova.backend"
+let BACKEND_PLIST = NSHomeDirectory() + "/Library/LaunchAgents/\(BACKEND_LABEL).plist"
+
+@discardableResult
+func launchctl(_ args: [String]) -> Int32 {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+    p.arguments = args
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    do { try p.run() } catch { return -1 }
+    p.waitUntilExit()
+    return p.terminationStatus
+}
+
 final class Backend {
-    var proc: Process?
     var quitting = false
     var external = false
+    let domain = "gui/\(getuid())"
 
     func start() {
-        if portAnswers() {
+        // свой сервис от прошлого запуска (например, после падения) перезапускаем, чужой не трогаем
+        if portAnswers() && !FileManager.default.fileExists(atPath: BACKEND_PLIST) {
             external = true
             appendLog("порт \(PORT) уже занят работающим сервисом — второй не запускаю")
             return
@@ -86,51 +104,39 @@ final class Backend {
             return
         }
         try? FileManager.default.createDirectory(atPath: SUPPORT, withIntermediateDirectories: true)
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: PYTHON)
-        p.arguments = [MAIN_PY, "serve"]
-        p.currentDirectoryURL = URL(fileURLWithPath: SUPPORT)
-        var env = ProcessInfo.processInfo.environment
-        env["SOVA_HOME"] = SUPPORT
-        env["PYTHONUNBUFFERED"] = "1"
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
-        p.environment = env
-        if !FileManager.default.fileExists(atPath: LOG) { FileManager.default.createFile(atPath: LOG, contents: nil) }
-        if let h = FileHandle(forWritingAtPath: LOG) {
-            h.seekToEndOfFile()
-            p.standardOutput = h
-            p.standardError = h
-        }
-        p.terminationHandler = { [weak self] pr in
-            appendLog("бэкенд завершился (код \(pr.terminationStatus))")
-            DispatchQueue.main.async {
-                guard let self = self, !self.quitting else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    if self.quitting { return }
-                    // если за это время порт занял кто-то другой — не дублируем
-                    if portAnswers() { self.external = true; return }
-                    self.launch()
-                }
-            }
-        }
+        try? FileManager.default.createDirectory(atPath: NSHomeDirectory() + "/Library/LaunchAgents", withIntermediateDirectories: true)
+        let plist: [String: Any] = [
+            "Label": BACKEND_LABEL,
+            "ProgramArguments": [PYTHON, MAIN_PY, "serve"],
+            "WorkingDirectory": SUPPORT,
+            "EnvironmentVariables": [
+                "SOVA_HOME": SUPPORT,
+                "PYTHONUNBUFFERED": "1",
+                "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+            ],
+            "RunAtLoad": true,
+            "KeepAlive": true,          // упал — launchd поднимет сам
+            "ThrottleInterval": 3,
+            "StandardOutPath": LOG,
+            "StandardErrorPath": LOG,
+        ]
         do {
-            try p.run()
-            proc = p
-            appendLog("бэкенд запущен, pid \(p.processIdentifier)")
+            let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+            try data.write(to: URL(fileURLWithPath: BACKEND_PLIST))
         } catch {
-            appendLog("не удалось запустить бэкенд: \(error)")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.launch() }
+            appendLog("не удалось записать \(BACKEND_PLIST): \(error)")
+            return
         }
+        launchctl(["bootout", "\(domain)/\(BACKEND_LABEL)"])
+        let rc = launchctl(["bootstrap", domain, BACKEND_PLIST])
+        appendLog(rc == 0 ? "бэкенд запущен через launchd" : "launchctl bootstrap вернул \(rc)")
     }
 
     func stop() {
         quitting = true
-        if let p = proc, p.isRunning {
-            p.terminate()
-            let end = Date().addingTimeInterval(2)
-            while p.isRunning && Date() < end { usleep(50_000) }
-            if p.isRunning { kill(p.processIdentifier, SIGKILL) }
-        }
+        if external { return }
+        launchctl(["bootout", "\(domain)/\(BACKEND_LABEL)"])
+        try? FileManager.default.removeItem(atPath: BACKEND_PLIST)
     }
 }
 
@@ -362,7 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func bootstrap() {
         DispatchQueue.global().async {
             let testOnly = ProcessInfo.processInfo.environment["SOVA_TEST_INSTALL_ONLY"] != nil  // только для тестов
-            if !testOnly && portAnswers() {
+            if !testOnly && portAnswers() && !FileManager.default.fileExists(atPath: BACKEND_PLIST) {
                 self.backend.external = true
                 appendLog("порт \(PORT) уже занят работающим сервисом — второй не запускаю")
                 DispatchQueue.main.async { self.page.load() }
@@ -428,8 +434,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func showWindow() {
+        // на macOS 14+ activate часто игнорируется, поэтому окно выводим поверх принудительно
         NSApp.activate(ignoringOtherApps: true)
+        if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 
     func buildStatusItem() {
